@@ -26,7 +26,7 @@ dependencies: [
 ```
 
 Or in Xcode:
-1. File > Add Packages
+1. File > Add Package Dependencies
 2. Enter package URL: `https://github.com/muta-labs/MutaSDK-iOS`
 3. Click "Add Package"
 
