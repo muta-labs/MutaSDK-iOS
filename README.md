@@ -147,9 +147,15 @@ struct ContentView: View {
 }
 ```
 
-## User Input Collection
+## Custom Events
 
-Muta allows you to collect user inputs during the placement flow. These inputs are automatically collected and made available through events.
+Muta allows you to emit custom events from your flows using the platform's behavior system. You can configure custom events in the Muta web editor and listen for them in your app to trigger specific actions.
+
+### Setting Up Custom Events
+
+1. In the Muta web editor, add an "Emit Event" behavior to any element
+2. Give your event a unique name (e.g., `signup_started`, `premium_selected`, `survey_completed`)
+3. Optionally add custom data to pass along with the event
 
 ### Example Usage
 
@@ -160,18 +166,34 @@ class YourViewController {
     var subscription: Subscription?
     
     func setupMuta() {
-        // Listen for user input events
+        // Listen for custom events
         subscription = Muta.shared.on { event in
-            if case .userInputFinal(let event) = event {
-                // Access text input values
-                event.userInputs.textInputs.forEach { input in
-                    print("Input from screen \(input.screenName): \(input.value)")
-                }
-                
-                // Access multiple choice selections
-                event.userInputs.multipleChoices.forEach { choice in
-                    let selections = choice.selections.map { $0.choiceText }
-                    print("Choices from screen \(choice.screenName): \(selections)")
+            if case .custom(let customEvent) = event {
+                switch customEvent.type {
+                case "signup_started":
+                    print("User started signup process")
+                    navigateToSignup()
+                    
+                case "premium_selected":
+                    if let planType = customEvent.eventData?["planType"] as? String,
+                       let price = customEvent.eventData?["price"] as? Double {
+                        print("User selected \(planType) plan at $\(price)")
+                        setPremiumUser(true)
+                    }
+                    
+                case "survey_completed":
+                    if let answers = customEvent.eventData?["answers"] as? [String: Any] {
+                        print("Survey completed with answers: \(answers)")
+                        saveSurveyData(answers)
+                    }
+                    
+                case "form_submitted":
+                    if let formData = customEvent.eventData {
+                        processFormData(formData)
+                    }
+                    
+                default:
+                    print("Received custom event: \(customEvent.type)")
                 }
             }
         }
@@ -189,33 +211,26 @@ class YourViewController {
 }
 ```
 
-### Input Types
+### Custom Event Structure
 
-1. Text Inputs
 ```swift
-struct TextInput {
-    let screenIndex: Int
-    let screenName: String
-    let value: String
-    let placeholder: String
-    let isRequired: Bool
+struct CustomEvent {
+    let type: String           // Your custom event name
+    let placementId: String    // ID of the placement
+    let flowName: String?      // Name of the flow (if configured)
+    let screenIndex: Int?      // Current screen index
+    let timestamp: Int         // Unix timestamp in ms
+    let eventData: [String: Any]?  // Custom data from the editor
 }
 ```
 
-2. Multiple Choice
-```swift
-struct MultipleChoiceInput {
-    let screenIndex: Int
-    let screenName: String
-    let isRequired: Bool
-    let selections: [Selection]
-}
+### Common Use Cases
 
-struct Selection {
-    let choiceText: String
-    let choiceIndex: Int
-}
-```
+1. **User Actions**: Track when users click specific CTAs or make choices
+2. **Navigation Control**: Trigger app navigation based on flow interactions
+3. **Data Collection**: Gather form submissions or survey responses
+4. **Feature Flags**: Enable/disable features based on onboarding choices
+5. **Conversion Tracking**: Track specific conversion events for analytics
 
 ## Analytics Integration
 
@@ -318,36 +333,16 @@ class ErrorHandler {
                     - Screen Name: \(event.screenName ?? "N/A")
                     """)
                     
-            case .userInputFinal(let event):
+            case .custom(let event):
                 print("""
-                    📝 User Input Final:
+                    🎯 Custom Event:
+                    - Type: \(event.type)
                     - Timestamp: \(event.timestamp)
                     - Placement ID: \(event.placementId)
                     - Flow Name: \(event.flowName ?? "N/A")
+                    - Screen Index: \(event.screenIndex ?? -1)
+                    - Event Data: \(event.eventData ?? [:])
                     """)
-                    
-                // Multiple Choice Inputs
-                event.userInputs.multipleChoices.forEach { choice in
-                    print("""
-                        🔘 Multiple Choice:
-                        - Screen Index: \(choice.screenIndex)
-                        - Screen Name: \(choice.screenName)
-                        - Required: \(choice.isRequired)
-                        - Selections: \(choice.selections.map { "[\($0.choiceText): \($0.choiceIndex)]" }.joined(separator: ", "))
-                        """)
-                }
-                    
-                // Text Inputs
-                event.userInputs.textInputs.forEach { input in
-                    print("""
-                        📝 Text Input:
-                        - Screen Index: \(input.screenIndex)
-                        - Screen Name: \(input.screenName)
-                        - Value: \(input.value)
-                        - Placeholder: \(input.placeholder)
-                        - Required: \(input.isRequired)
-                        """)
-                }
                     
             case .error(let error):
                 switch error {
@@ -430,10 +425,10 @@ case flowAbandoned(FlowAbandonedEvent)
 // Properties: placementId, flowName?, screenIndex, totalScreens, lastScreenIndex, screenName?, timestamp
 ```
 
-5. User Input Final
+5. Custom Events
 ```swift
-case userInputFinal(UserInputFinalEvent)
-// Properties: placementId, flowName?, timestamp, userInputs
+case custom(CustomEvent)
+// Properties: type, placementId, flowName?, screenIndex?, timestamp, eventData?
 ```
 
 6. Error Events
