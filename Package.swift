@@ -15,8 +15,8 @@ let package = Package(
     targets: [
         .binaryTarget(
             name: "MutaSDK",
-            url: "https://firebasestorage.googleapis.com/v0/b/muta-ae90b.firebasestorage.app/o/releases%2Fv1.0.4%2FMutaSDK.xcframework.zip?alt=media&token=02f19dbd-4f3c-447d-9959-802036edaa61",
-            checksum: "5238719ff95ed48473a4023a5c65c2ba284abc8cc2d7ad88a10057347f5a34c3"
+            url: "https://firebasestorage.googleapis.com/v0/b/muta-ae90b.firebasestorage.app/o/releases%2Fv1.1.0%2FMutaSDK.xcframework.zip?alt=media&token=e41150fa-d3a2-4f92-9b70-13d35dc35aa5",
+            checksum: "0bd2e9b5959787ee377a4b5676b757c073a7af7f39a3d98810888adb42f5cdee"
         )
     ]
 )

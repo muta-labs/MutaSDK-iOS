@@ -87,7 +87,8 @@ func displayPlacement(
     placementId: String,
     backgroundColor: Color = .white,
     presentationType: PresentationType = .slide,
-    loadingView: AnyView? = nil
+    loadingView: AnyView? = nil,
+    injectedScreens: [InjectedScreen] = []
 )
 
 // Using hex color string
@@ -95,7 +96,8 @@ func displayPlacement(
     placementId: String,
     backgroundHexColor: String,
     presentationType: PresentationType = .slide,
-    loadingView: AnyView? = nil
+    loadingView: AnyView? = nil,
+    injectedScreens: [InjectedScreen] = []
 )
 ```
 
@@ -108,6 +110,7 @@ func displayPlacement(
   - `.fade`: Fades in from transparent
   - `.none`: No animation
 - `loadingView` (optional): A custom SwiftUI view to show while the placement is loading
+- `injectedScreens` (optional): Array of native SwiftUI views to inject into code screens (see Code Screens section below)
 
 ## Example App
 
@@ -232,6 +235,147 @@ struct CustomEvent {
 4. **Feature Flags**: Enable/disable features based on onboarding choices
 5. **Conversion Tracking**: Track specific conversion events for analytics
 
+## Code Screens
+
+Code Screens allow you to inject native SwiftUI views into your Muta flows. This enables you to combine remotely configured flows with custom native functionality like authentication forms, payment screens, or any complex native UI.
+
+### How It Works
+
+1. In the Muta web editor, add a "Code Screen" to your flow and give it a unique name (e.g., "Login Screen", "Payment Form")
+2. Configure the navigation destinations for continue and back actions
+3. In your app, pass the corresponding SwiftUI view when displaying the placement
+
+### Example Usage
+
+```swift
+import MutaSDK
+
+// Display placement with injected native screens
+Muta.shared.displayPlacement(
+    placementId: "onboarding",
+    backgroundColor: .black,
+    presentationType: .none,
+    injectedScreens: [
+        InjectedScreen(
+            screenName: "Login Screen",  // Must match the name in Muta editor
+            view: { context in
+                AnyView(LoginScreen(context: context))
+            }
+        ),
+        InjectedScreen(
+            screenName: "Payment Form",   // Must match the name in Muta editor
+            view: { context in
+                AnyView(PaymentScreen(context: context))
+            }
+        )
+    ]
+)
+```
+
+### Creating a Code Screen View
+
+Your view will receive a `CodeScreenContext` with navigation callbacks and flow data:
+
+```swift
+import SwiftUI
+import MutaSDK
+
+struct LoginScreen: View {
+    let context: CodeScreenContext
+
+    @State private var email = ""
+    @State private var password = ""
+    @State private var isLoading = false
+
+    var body: some View {
+        VStack(spacing: 24) {
+            Text("Welcome Back")
+                .font(.largeTitle)
+
+            TextField("Email", text: $email)
+                .textFieldStyle(.roundedBorder)
+
+            SecureField("Password", text: $password)
+                .textFieldStyle(.roundedBorder)
+
+            Button(action: handleLogin) {
+                if isLoading {
+                    ProgressView()
+                } else {
+                    Text("Sign In")
+                }
+            }
+            .disabled(isLoading)
+
+            Button("Back") {
+                context.onBack()  // Navigate to configured back destination
+            }
+        }
+        .padding()
+    }
+
+    private func handleLogin() {
+        isLoading = true
+
+        // Perform login
+        Task {
+            await loginUser(email: email, password: password)
+            isLoading = false
+            context.onContinue()  // Navigate to configured continue destination
+        }
+    }
+}
+```
+
+### CodeScreenContext Structure
+
+```swift
+public struct CodeScreenContext {
+    /// Navigate to the next screen configured in the flow
+    public let onContinue: () -> Void
+
+    /// Navigate to the previous screen configured in the flow
+    public let onBack: () -> Void
+
+    /// Current flow variables
+    public let variables: [[String: Any]]
+
+    /// Unique identifier for this screen
+    public let screenId: String
+
+    /// Position of this screen in the flow
+    public let screenIndex: Int
+}
+```
+
+### Benefits
+
+- **Hybrid Flows**: Combine no-code screens with custom native screens
+- **Seamless Transitions**: Native screens animate in/out matching your flow animations
+- **Full Control**: Access to all native capabilities while maintaining remote configurability
+- **Dynamic Routing**: Configure navigation destinations remotely without code changes
+
+### Code Screen Events
+
+When code screens are displayed or interacted with, the SDK emits specific events:
+
+```swift
+import MutaSDK
+
+let subscription = Muta.shared.on { event in
+    switch event {
+    case .codeScreenDisplayed(let event):
+        print("Code screen displayed: \(event.screenName)")
+
+    case .codeScreenAction(let event):
+        print("Code screen action: \(event.action)") // "continue" or "back"
+
+    default:
+        break
+    }
+}
+```
+
 ## Analytics Integration
 
 Muta provides a flexible event system that works with any analytics provider. Events are emitted during key user interactions.
@@ -256,13 +400,20 @@ class AnalyticsManager {
                 ])
                 
             case .flowCompleted(let event):
-                Analytics.track("Flow Completed", properties: [
+                var properties: [String: Any] = [
                     "placement_id": event.placementId,
                     "flow_name": event.flowName,
                     "screen_index": event.screenIndex,
                     "total_screens": event.totalScreens,
                     "timestamp": event.timestamp
-                ])
+                ]
+
+                // Include collected variables if present
+                if let variables = event.eventData?["variables"] as? [String: Any] {
+                    properties["variables"] = variables
+                }
+
+                Analytics.track("Flow Completed", properties: properties)
                 
             // Handle other events...
             }
@@ -311,7 +462,7 @@ class ErrorHandler {
                     """)
                     
             case .flowCompleted(let event):
-                print("""
+                var message = """
                     ✅ Flow Completed:
                     - Timestamp: \(event.timestamp)
                     - Placement ID: \(event.placementId)
@@ -319,7 +470,13 @@ class ErrorHandler {
                     - Screen Index: \(event.screenIndex)
                     - Total Screens: \(event.totalScreens)
                     - Screen Name: \(event.screenName)
-                    """)
+                    """
+
+                if let variables = event.eventData?["variables"] as? [String: Any] {
+                    message += "\n    - Variables: \(variables)"
+                }
+
+                print(message)
                     
             case .flowAbandoned(let event):
                 print("""
@@ -333,6 +490,23 @@ class ErrorHandler {
                     - Screen Name: \(event.screenName ?? "N/A")
                     """)
                     
+            case .codeScreenDisplayed(let event):
+                print("""
+                    🖥️ Code Screen Displayed:
+                    - Screen ID: \(event.screenId)
+                    - Screen Name: \(event.screenName)
+                    - Timestamp: \(event.timestamp)
+                    """)
+
+            case .codeScreenAction(let event):
+                print("""
+                    🔘 Code Screen Action:
+                    - Action: \(event.action)
+                    - Screen ID: \(event.screenId)
+                    - Screen Name: \(event.screenName)
+                    - Timestamp: \(event.timestamp)
+                    """)
+
             case .custom(let event):
                 print("""
                     🎯 Custom Event:
@@ -343,7 +517,7 @@ class ErrorHandler {
                     - Screen Index: \(event.screenIndex ?? -1)
                     - Event Data: \(event.eventData ?? [:])
                     """)
-                    
+
             case .error(let error):
                 switch error {
                 case .network(let message, let timestamp):
@@ -416,7 +590,8 @@ case screenViewed(ScreenViewedEvent)
 3. Flow Completed
 ```swift
 case flowCompleted(FlowCompletedEvent)
-// Properties: placementId, flowName, screenIndex, totalScreens, screenName, timestamp
+// Properties: placementId, flowName, screenIndex, totalScreens, screenName, timestamp, eventData?
+// eventData contains variables collected during the flow: eventData?["variables"] as? [String: Any]
 ```
 
 4. Flow Abandoned
@@ -425,13 +600,26 @@ case flowAbandoned(FlowAbandonedEvent)
 // Properties: placementId, flowName?, screenIndex, totalScreens, lastScreenIndex, screenName?, timestamp
 ```
 
-5. Custom Events
+5. Code Screen Displayed
+```swift
+case codeScreenDisplayed(CodeScreenDisplayedEvent)
+// Properties: screenId, screenName, timestamp
+```
+
+6. Code Screen Action
+```swift
+case codeScreenAction(CodeScreenActionEvent)
+// Properties: action, screenId, screenName, timestamp
+// action: "continue" or "back"
+```
+
+7. Custom Events
 ```swift
 case custom(CustomEvent)
 // Properties: type, placementId, flowName?, screenIndex?, timestamp, eventData?
 ```
 
-6. Error Events
+8. Error Events
 ```swift
 case error(ErrorEvent)
 // Types: .network(message, timestamp) or .placement(message, code, timestamp, placementId)
