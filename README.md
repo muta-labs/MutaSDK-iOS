@@ -209,7 +209,7 @@ class YourViewController {
     }
     
     deinit {
-        subscription?.remove()
+        subscription?.unsubscribe()
     }
 }
 ```
@@ -421,7 +421,7 @@ class AnalyticsManager {
     }
     
     deinit {
-        subscription?.remove()
+        subscription?.unsubscribe()
     }
 }
 ```
@@ -545,7 +545,7 @@ class ErrorHandler {
     }
     
     deinit {
-        subscription?.remove()
+        subscription?.unsubscribe()
     }
 }
 ```
@@ -591,7 +591,35 @@ case screenViewed(ScreenViewedEvent)
 ```swift
 case flowCompleted(FlowCompletedEvent)
 // Properties: placementId, flowName, screenIndex, totalScreens, screenName, timestamp, eventData?
-// eventData contains variables collected during the flow: eventData?["variables"] as? [String: Any]
+// eventData contains variables collected during the flow
+```
+
+#### Variable Structure
+
+When a flow completes, `eventData["variables"]` contains a dictionary where:
+- **Key**: Variable ID (e.g., `var_1758310510757_as20wkeo4`)
+- **Value**: Dictionary containing:
+  - `id` (String): Unique variable identifier
+  - `name` (String): Human-readable variable name from the Muta editor
+  - `type` (String): Variable type (e.g., "text")
+  - `value` (Any): The collected value
+  - `defaultValue` (Any): The default value
+
+**Example:**
+```swift
+if let variables = event.eventData?["variables"] as? [String: [String: Any]] {
+    for (varId, varData) in variables {
+        let name = varData["name"] as? String ?? ""
+        let value = varData["value"] as? String ?? ""
+        print("Variable '\(name)': \(value)")
+    }
+}
+```
+
+**Output:**
+```
+Variable 'MultipleChoice1': Family
+Variable 'MultipleChoice2': Fluent
 ```
 
 4. Flow Abandoned
@@ -638,7 +666,7 @@ let flowCompletedSubscription = Muta.shared.on(Muta.FlowCompletedEvent.self) { e
     // Handle flow completed event
 }
 
-// Don't forget to remove subscriptions when done
-subscription.remove()
-flowCompletedSubscription.remove()
+// Don't forget to unsubscribe when done
+subscription.unsubscribe()
+flowCompletedSubscription.unsubscribe()
 ``` 
