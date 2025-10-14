@@ -15,8 +15,8 @@ let package = Package(
     targets: [
         .binaryTarget(
             name: "MutaSDK",
-            url: "https://github.com/muta-labs/MutaSDK-iOS/releases/download/1.1.1/MutaSDK.xcframework.zip",
-            checksum: "8afd90dc1282f06264b19fc3d1341f781e6f8a31c81d81f02a8fb5db488d8b5a"
+            url: "https://github.com/muta-labs/MutaSDK-iOS/releases/download/1.1.2/MutaSDK.xcframework.zip",
+            checksum: "373e27eb4733d19ac445a5e473d71efaaa3d07dfef4842a60ddfbf4e44a1095f"
         )
     ]
 )
